@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Estatística Rápida – Medidas & Histogramas</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --card: #121833;
+        --muted: #8aa0ff;
+        --text: #e7ecff;
+        --accent: #7aa2ff;
+        --ok: #6ee7b7;
+        --warn: #fbbf24;
+        --danger: #f87171;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: linear-gradient(180deg, #0b1020, #0b132b 40%, #0d142f);
+        color: var(--text);
+      }
+      .container {
+        max-width: 1100px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      header {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      header h1 {
+        font-size: clamp(20px, 2.3vw, 28px);
+        margin: 0;
+        letter-spacing: 0.2px;
+      }
+      header .badge {
+        font-size: 12px;
+        padding: 4px 8px;
+        border: 1px solid #2b376b;
+        border-radius: 999px;
+        color: #c9d3ff;
+      }
+      .card {
+        background: linear-gradient(180deg, #111737 0%, #101632 100%);
+        border: 1px solid rgba(122, 162, 255, 0.12);
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .grid.cols {
+        grid-template-columns: 1.2fr 1fr;
+      }
+      @media (max-width: 920px) {
+        .grid.cols {
+          grid-template-columns: 1fr;
+        }
+      }
+      .section {
+        padding: 16px;
+        border-top: 1px solid rgba(122, 162, 255, 0.08);
+      }
+      .section:first-child {
+        border-top: 0;
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+      }
+      .section h2 {
+        font-size: 16px;
+        margin: 0 0 8px 0;
+        color: #cfe1ff;
+      }
+      textarea {
+        width: 100%;
+        min-height: 140px;
+        resize: vertical;
+        background: #0e1430;
+        color: #e9edff;
+        border: 1px solid #263060;
+        border-radius: 12px;
+        padding: 12px;
+        outline: none;
+        box-shadow: inset 0 0 0 1px transparent;
+        transition: box-shadow 0.2s, border-color 0.2s;
+      }
+      textarea:focus {
+        border-color: #3852a8;
+        box-shadow: 0 0 0 3px rgba(122, 162, 255, 0.25);
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: end;
+      }
+      label {
+        font-size: 12px;
+        color: #b9c6ff;
+        display: block;
+        margin-bottom: 4px;
+      }
+      input[type="number"],
+      select {
+        background: #0e1430;
+        color: #e9edff;
+        border: 1px solid #263060;
+        border-radius: 10px;
+        padding: 10px 12px;
+        outline: none;
+        width: 100%;
+        min-width: 120px;
+      }
+      button {
+        background: linear-gradient(135deg, #6a8cff, #7aa2ff);
+        color: white;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(122, 162, 255, 0.35);
+        transition: transform 0.06s ease;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid rgba(122, 162, 255, 0.35);
+        color: #cfe1ff;
+        box-shadow: none;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 8px;
+        border-bottom: 1px dashed rgba(122, 162, 255, 0.15);
+      }
+      th {
+        color: #cfe1ff;
+        font-weight: 600;
+      }
+      .muted {
+        color: #97a7ff;
+        opacity: 0.9;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid #31407a;
+        color: #d6e2ff;
+        font-size: 12px;
+      }
+      .stat {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .stat b {
+        font-size: 15px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      .foot {
+        color: #97a7ff;
+        font-size: 12px;
+        opacity: 0.85;
+      }
+      .warn {
+        color: var(--warn);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Estatística Rápida <span class="muted">— média, mediana, moda, variância, desvio, CV e histograma</span></h1>
+        <span class="badge">100% local / sem upload</span>
+      </header>
+
+      <div class="card">
+        <div class="section grid cols">
+          <div>
+            <h2>1) Cole seus dados (números separados por vírgula)</h2>
+            <textarea id="inputData" placeholder="Ex.: 18,20,19,22,21,20,20,19,18,22"></textarea>
+            <div class="row" style="margin-top: 10px">
+              <div>
+                <label for="decimal">Separador decimal (se usar vírgula em decimais)</label>
+                <select id="decimal">
+                  <option value="auto" selected>Auto</option>
+                  <option value="dot">Ponto (.)</option>
+                  <option value="comma">Vírgula (,)</option>
+                </select>
+              </div>
+              <div>
+                <label for="bins">Nº de classes (bins do histograma)</label>
+                <input type="number" id="bins" min="1" step="1" placeholder="auto (Sturges)" />
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button id="btnCalc">Calcular</button>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button id="btnExample" class="btn-ghost">Usar exemplo</button>
+              </div>
+            </div>
+            <p class="foot">Dica: aceita separadores como vírgula, ponto e vírgula, espaço e nova linha. Decimais com vírgula também são convertidos.</p>
+          </div>
+          <div>
+            <h2>2) Resumo rápido</h2>
+            <div class="row">
+              <div class="stat"><span class="pill">n</span> <b id="s_n">—</b></div>
+              <div class="stat"><span class="pill">mín</span> <b id="s_min">—</b></div>
+              <div class="stat"><span class="pill">máx</span> <b id="s_max">—</b></div>
+              <div class="stat"><span class="pill">amplitude</span> <b id="s_range">—</b></div>
+            </div>
+            <div class="row" style="margin-top: 8px">
+              <div class="stat"><span class="pill">média</span> <b id="s_mean">—</b></div>
+              <div class="stat"><span class="pill">mediana</span> <b id="s_median">—</b></div>
+              <div class="stat"><span class="pill">moda</span> <b id="s_mode">—</b></div>
+            </div>
+            <div class="row" style="margin-top: 8px">
+              <div class="stat"><span class="pill">variância (pop)</span> <b id="s_varp">—</b></div>
+              <div class="stat"><span class="pill">desvio (pop)</span> <b id="s_stdp">—</b></div>
+            </div>
+            <div class="row" style="margin-top: 8px">
+              <div class="stat"><span class="pill">variância (amostral)</span> <b id="s_vars">—</b></div>
+              <div class="stat"><span class="pill">desvio (amostral)</span> <b id="s_stds">—</b></div>
+              <div class="stat"><span class="pill">CV%</span> <b id="s_cv">—</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>3) Tabela de frequências (histograma)</h2>
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px">
+            <div class="foot">Classes construídas com Sturges por padrão (⌈log₂ n⌉ + 1). Você pode ajustar nas opções.</div>
+            <div class="row">
+              <button id="btnDownloadCsv" class="btn-ghost">Baixar CSV</button>
+            </div>
+          </div>
+          <div style="overflow: auto">
+            <table id="freqTable"></table>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>4) Histograma</h2>
+          <canvas id="histCanvas" height="120"></canvas>
+        </div>
+
+        <div class="section">
+          <h2>5) Dados ordenados</h2>
+          <div id="sortedBox" class="mono foot"></div>
+        </div>
+      </div>
+
+      <p class="foot" style="margin-top: 12px">Feito com <span aria-hidden>❤</span> em JavaScript. Cálculos locais, sem enviar dados.</p>
+    </div>
+
+    <script>
+      // ————— Utils —————
+      function parseNumbers(str, decimalMode = "auto") {
+        if (!str) return [];
+        let s = String(str).trim();
+        // Normalizar separadores (quebra-linha, ponto e vírgula, tab) para vírgula
+        s = s.replace(/[\n\t;\s]+/g, ",");
+        // Remover vírgulas duplicadas
+        s = s.replace(/,+/g, ",").replace(/^,|,$/g, "");
+
+        const items = s
+          .split(",")
+          .map(x => x.trim())
+          .filter(x => x.length);
+
+        return items
+          .map(x => {
+            let v = x;
+            if (decimalMode === "comma" || (decimalMode === "auto" && /\d,\d/.test(v) && !/\d\.\d/.test(v))) {
+              v = v.replace(/\./g, ""); // remove separador de milhares
+              v = v.replace(",", ".");
+            }
+            return Number(v);
+          })
+          .filter(v => Number.isFinite(v));
+      }
+
+      function mean(arr) {
+        return arr.reduce((a, b) => a + b, 0) / arr.length;
+      }
+      function median(arr) {
+        const a = [...arr].sort((x, y) => x - y);
+        const n = a.length;
+        if (n === 0) return NaN;
+        return n % 2 === 1 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+      }
+      function modes(arr) {
+        const freq = new Map();
+        for (const x of arr) freq.set(x, (freq.get(x) || 0) + 1);
+        const max = Math.max(...freq.values());
+        if (max <= 1) return [];
+        return [...freq.entries()]
+          .filter(([k, v]) => v === max)
+          .map(([k]) => k)
+          .sort((a, b) => a - b);
+      }
+      function variance(arr, sample = false) {
+        const m = mean(arr);
+        const n = arr.length;
+        const ss = arr.reduce((acc, x) => acc + (x - m) * (x - m), 0);
+        return sample && n > 1 ? ss / (n - 1) : ss / n;
+      }
+      function sturges(n) {
+        return Math.max(1, Math.ceil(Math.log2(n)) + 1);
+      }
+      function nice(x) {
+        return Number.isFinite(x) ? (+x.toFixed(6)).toString() : "—";
+      }
+
+      function buildHistogram(data, k) {
+        const min = Math.min(...data),
+          max = Math.max(...data);
+        const width = (max - min) / k || 1;
+        const bins = Array.from({ length: k }, (_, i) => ({
+          from: min + i * width,
+          to: min + (i + 1) * width,
+          freq: 0,
+        }));
+        for (const x of data) {
+          let idx = Math.floor((x - min) / width);
+          if (idx >= k) idx = k - 1; // incluir o valor máximo
+          bins[idx].freq++;
+        }
+        return bins;
+      }
+
+      // ————— UI —————
+      const el = id => document.getElementById(id);
+      const input = el("inputData");
+      const decimalSel = el("decimal");
+      const binsInput = el("bins");
+      let chart;
+
+      function render(data) {
+        if (!data.length) {
+          alert("Forneça ao menos um número.");
+          return;
+        }
+        const n = data.length;
+        const min = Math.min(...data),
+          max = Math.max(...data);
+        const range = max - min;
+        const m = mean(data);
+        const med = median(data);
+        const md = modes(data);
+        const varp = variance(data, false);
+        const stdp = Math.sqrt(varp);
+        const vars = variance(data, true);
+        const stds = Math.sqrt(vars);
+        const cv = (stds / m) * 100;
+
+        // resumo
+        el("s_n").textContent = n;
+        el("s_min").textContent = nice(min);
+        el("s_max").textContent = nice(max);
+        el("s_range").textContent = nice(range);
+        el("s_mean").textContent = nice(m);
+        el("s_median").textContent = nice(med);
+        el("s_mode").textContent = md.length ? md.join(", ") : "—";
+        el("s_varp").textContent = nice(varp);
+        el("s_stdp").textContent = nice(stdp);
+        el("s_vars").textContent = n > 1 ? nice(vars) : "—";
+        el("s_stds").textContent = n > 1 ? nice(stds) : "—";
+        el("s_cv").textContent = n > 1 && isFinite(cv) ? nice(cv) : "—";
+
+        // histograma
+        const k = Math.max(1, +(binsInput.value || 0)) || sturges(n);
+        const bins = buildHistogram(data, k);
+        renderFreqTable(bins);
+        renderChart(bins);
+
+        // dados ordenados
+        const sorted = [...data].sort((a, b) => a - b);
+        el("sortedBox").textContent = sorted.join(", ");
+
+        // CSV download handler
+        el("btnDownloadCsv").onclick = () => downloadCsvSummary(sorted, bins, { n, min, max, range, m, med, md, varp, stdp, vars, stds, cv });
+      }
+
+      function renderFreqTable(bins) {
+        const tbl = el("freqTable");
+        const rows = [];
+        rows.push(`<tr><th>Classe</th><th>Intervalo</th><th>Frequência</th><th>Frequência relativa</th><th>Frequência acumulada</th><th>Frequência acumulada relativa</th></tr>`);
+        let acc = 0;
+        let accRel = 0;
+        const total = bins.reduce((s, b) => s + b.freq, 0);
+        bins.forEach((b, i) => {
+          acc += b.freq;
+          const fr = total ? b.freq / total : 0;
+          accRel += fr;
+          rows.push(`<tr>
+            <td>${i + 1}</td>
+            <td>[${nice(b.from)} -| ${nice(b.to)})</td>
+            <td>${b.freq}</td>
+            <td>${(fr * 100).toFixed(2)}%</td>
+            <td>${acc}</td>
+            <td>${(accRel * 100).toFixed(2)}%</td>
+          </tr>`);
+        });
+        tbl.innerHTML = rows.join("");
+      }
+
+      function renderChart(bins) {
+        const ctx = el("histCanvas");
+        const labels = bins.map((b, i) => `[${nice(b.from)} -| ${nice(b.to)})`);
+        const data = bins.map(b => b.freq);
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Frequência", data }] },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: ctx => `freq: ${ctx.formattedValue}` } },
+            },
+            scales: {
+              x: { grid: { color: "rgba(122,162,255,0.15)" }, ticks: { color: "#dbe4ff", maxRotation: 0, autoSkip: true } },
+              y: { grid: { color: "rgba(122,162,255,0.15)" }, ticks: { color: "#dbe4ff" } },
+            },
+          },
+        });
+      }
+      function downloadCsvSummary(sorted, bins, s) {
+        const lines = [];
+        lines.push("Resumo");
+        lines.push(`n;${s.n}`);
+        lines.push(`min;${s.min}`);
+        lines.push(`max;${s.max}`);
+        lines.push(`amplitude;${s.range}`);
+        lines.push(`media;${s.m}`);
+        lines.push(`mediana;${s.med}`);
+        lines.push(`moda(s);${(s.md || []).join(" | ")}`);
+        lines.push(`variancia_pop;${s.varp}`);
+        lines.push(`desvio_pop;${s.stdp}`);
+        lines.push(`variancia_amostral;${s.vars}`);
+        lines.push(`desvio_amostral;${s.stds}`);
+        lines.push(`cv_percent;${s.cv}`);
+        lines.push("");
+        lines.push("Dados ordenados");
+        lines.push(sorted.join(";"));
+        lines.push("");
+        lines.push("Frequencias");
+        lines.push("classe;intervalo;freq;freq_rel;freq_acum;freq_acum_rel");
+        let acc = 0;
+        const total = bins.reduce((z, b) => z + b.freq, 0);
+        bins.forEach((b, i) => {
+          acc += b.freq;
+          const fr = total ? b.freq / total : 0;
+          const accRel = total ? acc / total : 0;
+          lines.push(`${i + 1};[${b.from} -| ${b.to});${b.freq};${(fr * 100).toFixed(2)}%;${acc};${(accRel * 100).toFixed(2)}%`);
+        });
+
+        const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "estatistica-resumo.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      // ——— Events ———
+      el("btnCalc").addEventListener("click", () => {
+        const decimalMode = decimalSel.value;
+        const data = parseNumbers(input.value, decimalMode);
+        if (!data.length) {
+          alert("Não encontrei números válidos. Verifique o formato.");
+          return;
+        }
+        render(data);
+      });
+
+      el("btnExample").addEventListener("click", () => {
+        input.value = "18,20,19,22,21,20,20,19,18,22,19,21,22,20,23,19,18,21,21,20";
+      });
+    </script>
+  </body>
+</html>
