@@ -198,6 +198,35 @@
       .warn {
         color: var(--warn);
       }
+      .sorted-chip {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 6px;
+        margin: 1px 0;
+      }
+      .sorted-chip.mode {
+        background: rgba(251, 191, 36, 0.25);
+        color: #ffd36a;
+        border: 1px solid rgba(251, 191, 36, 0.35);
+      }
+      .meta {
+        font-size: 12px;
+        color: #cfe1ff;
+        opacity: 0.9;
+        margin-top: 6px;
+      }
+      .tr-modal {
+        background: rgba(251, 191, 36, 0.1);
+      }
+      .badge-modal {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(251, 191, 36, 0.45);
+        color: #ffd36a;
+      }
     </style>
   </head>
   <body>
@@ -234,7 +263,7 @@
                 <button id="btnExample" class="btn-ghost">Usar exemplo</button>
               </div>
             </div>
-            <p class="foot">Dica: aceita separadores como vírgula, ponto e vírgula, espaço e nova linha. Decimais com vírgula também são convertidos.</p>
+            <p class="foot">Dica: aceita vírgula, ponto e vírgula, espaço e nova linha. Decimais com vírgula também são convertidos.</p>
           </div>
           <div>
             <h2>2) Resumo rápido</h2>
@@ -258,13 +287,14 @@
               <div class="stat"><span class="pill">desvio (amostral)</span> <b id="s_stds">—</b></div>
               <div class="stat"><span class="pill">CV%</span> <b id="s_cv">—</b></div>
             </div>
+            <div class="meta" id="binMeta"></div>
           </div>
         </div>
 
         <div class="section">
           <h2>3) Tabela de frequências (histograma)</h2>
           <div class="row" style="justify-content: space-between; margin-bottom: 8px">
-            <div class="foot">Classes construídas com Sturges por padrão (⌈log₂ n⌉ + 1). Você pode ajustar nas opções.</div>
+            <div class="foot">Classes automáticas (Sturges + passo “bonito”). Você pode ajustar o nº de classes nas opções.</div>
             <div class="row">
               <button id="btnDownloadCsv" class="btn-ghost">Baixar CSV</button>
             </div>
@@ -282,6 +312,7 @@
         <div class="section">
           <h2>5) Dados ordenados</h2>
           <div id="sortedBox" class="mono foot"></div>
+          <div class="foot" id="sortedLegend"></div>
         </div>
       </div>
 
@@ -293,21 +324,17 @@
       function parseNumbers(str, decimalMode = "auto") {
         if (!str) return [];
         let s = String(str).trim();
-        // Normalizar separadores (quebra-linha, ponto e vírgula, tab) para vírgula
         s = s.replace(/[\n\t;\s]+/g, ",");
-        // Remover vírgulas duplicadas
         s = s.replace(/,+/g, ",").replace(/^,|,$/g, "");
-
         const items = s
           .split(",")
           .map(x => x.trim())
-          .filter(x => x.length);
-
+          .filter(Boolean);
         return items
           .map(x => {
             let v = x;
             if (decimalMode === "comma" || (decimalMode === "auto" && /\d,\d/.test(v) && !/\d\.\d/.test(v))) {
-              v = v.replace(/\./g, ""); // remove separador de milhares
+              v = v.replace(/\./g, "");
               v = v.replace(",", ".");
             }
             return Number(v);
@@ -315,9 +342,7 @@
           .filter(v => Number.isFinite(v));
       }
 
-      function mean(arr) {
-        return arr.reduce((a, b) => a + b, 0) / arr.length;
-      }
+      const mean = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
       function median(arr) {
         const a = [...arr].sort((x, y) => x - y);
         const n = a.length;
@@ -330,38 +355,76 @@
         const max = Math.max(...freq.values());
         if (max <= 1) return [];
         return [...freq.entries()]
-          .filter(([k, v]) => v === max)
+          .filter(([, v]) => v === max)
           .map(([k]) => k)
           .sort((a, b) => a - b);
       }
       function variance(arr, sample = false) {
-        const m = mean(arr);
-        const n = arr.length;
+        const m = mean(arr),
+          n = arr.length;
         const ss = arr.reduce((acc, x) => acc + (x - m) * (x - m), 0);
         return sample && n > 1 ? ss / (n - 1) : ss / n;
       }
-      function sturges(n) {
-        return Math.max(1, Math.ceil(Math.log2(n)) + 1);
-      }
-      function nice(x) {
-        return Number.isFinite(x) ? (+x.toFixed(6)).toString() : "—";
+      const sturges = n => Math.max(1, Math.ceil(Math.log2(n)) + 1);
+      const nice = x => (Number.isFinite(x) ? (+x.toFixed(6)).toString() : "—");
+
+      // número "bonito" de passo (1, 2, 2.5, 5 × 10^p)
+      function niceStep(raw) {
+        if (!isFinite(raw) || raw <= 0) return 1;
+        const exp = Math.floor(Math.log10(raw));
+        const f = raw / Math.pow(10, exp);
+        const base = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+        return base * Math.pow(10, exp);
       }
 
-      function buildHistogram(data, k) {
+      function isDiscreteData(data) {
+        const allInt = data.every(x => Number.isInteger(x));
+        const uniq = new Set(data).size;
+        return allInt && (uniq <= 20 || uniq <= data.length / 2);
+      }
+
+      // Constrói bins automaticamente:
+      // - Discreto: uma classe por valor (rótulo = valor)
+      // - Contínuo: Sturges -> passo "bonito", alinhado ao piso deste passo
+      function buildHistogramAuto(data, kInput) {
+        const n = data.length;
         const min = Math.min(...data),
           max = Math.max(...data);
-        const width = (max - min) / k || 1;
-        const bins = Array.from({ length: k }, (_, i) => ({
-          from: min + i * width,
-          to: min + (i + 1) * width,
+        const range = max - min || 1;
+
+        // DISCRETO
+        if (isDiscreteData(data) && !kInput) {
+          const freq = new Map();
+          for (const x of data) freq.set(x, (freq.get(x) || 0) + 1);
+          const values = [...freq.keys()].sort((a, b) => a - b);
+          const bins = values.map(v => ({
+            from: v - 0.5,
+            to: v + 0.5,
+            freq: freq.get(v),
+            label: String(v),
+          }));
+          return { bins, k: bins.length, h: 1, start: values[0] - 0.5, discrete: true };
+        }
+
+        // CONTÍNUO
+        const k = Math.max(1, +(kInput || 0)) || sturges(n);
+        const rawWidth = range / k;
+        const h = niceStep(rawWidth);
+        const start = Math.floor(min / h) * h;
+        const end = Math.ceil(max / h) * h;
+        const kReal = Math.max(1, Math.round((end - start) / h));
+        const bins = Array.from({ length: kReal }, (_, i) => ({
+          from: start + i * h,
+          to: start + (i + 1) * h,
           freq: 0,
         }));
         for (const x of data) {
-          let idx = Math.floor((x - min) / width);
-          if (idx >= k) idx = k - 1; // incluir o valor máximo
+          let idx = Math.floor((x - start) / h);
+          if (idx < 0) idx = 0;
+          if (idx >= bins.length) idx = bins.length - 1;
           bins[idx].freq++;
         }
-        return bins;
+        return { bins, k: bins.length, h, start, discrete: false };
       }
 
       // ————— UI —————
@@ -376,6 +439,7 @@
           alert("Forneça ao menos um número.");
           return;
         }
+
         const n = data.length;
         const min = Math.min(...data),
           max = Math.max(...data);
@@ -403,56 +467,102 @@
         el("s_stds").textContent = n > 1 ? nice(stds) : "—";
         el("s_cv").textContent = n > 1 && isFinite(cv) ? nice(cv) : "—";
 
-        // histograma
-        const k = Math.max(1, +(binsInput.value || 0)) || sturges(n);
-        const bins = buildHistogram(data, k);
+        // histograma (auto)
+        const kUser = binsInput.value ? +binsInput.value : undefined;
+        const { bins, k, h, start, discrete } = buildHistogramAuto(data, kUser);
         renderFreqTable(bins);
         renderChart(bins);
+        el("binMeta").textContent = `k = ${k}  |  h = ${nice(h)}  |  início = ${nice(start)}  ${discrete ? "• modo discreto" : ""}`;
 
-        // dados ordenados
+        // dados ordenados com moda em destaque
         const sorted = [...data].sort((a, b) => a - b);
-        el("sortedBox").textContent = sorted.join(", ");
+        const modeSet = new Set(md);
+        el("sortedBox").innerHTML = sorted
+          .map(v => {
+            const isMode = modeSet.has(v);
+            return `<span class="sorted-chip ${isMode ? "mode" : ""}">${nice(v)}</span>`;
+          })
+          .join(" ");
+        el("sortedLegend").innerHTML = md.length
+          ? `<span class="sorted-chip mode"> </span> <span class="foot">= moda (${md.join(", ")})</span>`
+          : `<span class="foot">Sem moda (todas as frequências iguais)</span>`;
 
-        // CSV download handler
+        // CSV
         el("btnDownloadCsv").onclick = () => downloadCsvSummary(sorted, bins, { n, min, max, range, m, med, md, varp, stdp, vars, stds, cv });
+      }
+
+      function intervalLabel(b) {
+        // Se veio com label (discreto), usa-o; senão formata [a - b)
+        if (b.label) return String(b.label);
+        return `[${nice(b.from)} - ${nice(b.to)})`;
       }
 
       function renderFreqTable(bins) {
         const tbl = el("freqTable");
         const rows = [];
         rows.push(`<tr><th>Classe</th><th>Intervalo</th><th>Frequência</th><th>Frequência relativa</th><th>Frequência acumulada</th><th>Frequência acumulada relativa</th></tr>`);
-        let acc = 0;
-        let accRel = 0;
+
         const total = bins.reduce((s, b) => s + b.freq, 0);
+        const maxF = Math.max(0, ...bins.map(b => b.freq));
+        const modalIdx = new Set(bins.map((b, i) => (b.freq === maxF ? i : -1)).filter(i => i >= 0));
+
+        let acc = 0,
+          accRel = 0;
         bins.forEach((b, i) => {
           acc += b.freq;
           const fr = total ? b.freq / total : 0;
           accRel += fr;
-          rows.push(`<tr>
-            <td>${i + 1}</td>
-            <td>[${nice(b.from)} -| ${nice(b.to)})</td>
-            <td>${b.freq}</td>
-            <td>${(fr * 100).toFixed(2)}%</td>
-            <td>${acc}</td>
-            <td>${(accRel * 100).toFixed(2)}%</td>
-          </tr>`);
+          const isModal = modalIdx.has(i);
+          rows.push(`<tr class="${isModal ? "tr-modal" : ""}">
+      <td>${i + 1}${isModal ? `<span class="badge-modal">modal</span>` : ""}</td>
+      <td>${intervalLabel(b)}</td>
+      <td>${b.freq}</td>
+      <td>${(fr * 100).toFixed(2)}%</td>
+      <td>${acc}</td>
+      <td>${(accRel * 100).toFixed(2)}%</td>
+    </tr>`);
         });
         tbl.innerHTML = rows.join("");
       }
 
       function renderChart(bins) {
         const ctx = el("histCanvas");
-        const labels = bins.map((b, i) => `[${nice(b.from)} -| ${nice(b.to)})`);
+        const labels = bins.map(intervalLabel);
         const data = bins.map(b => b.freq);
+
+        // identifica classe(s) modal(is)
+        const maxF = Math.max(0, ...data);
+        const modalIdx = new Set(data.map((f, i) => (f === maxF ? i : -1)).filter(i => i >= 0));
+
+        // cores: padrão + destaque para modais
+        const baseBg = "rgba(122,162,255,0.35)";
+        const baseBorder = "rgba(122,162,255,0.85)";
+        const modalBg = "rgba(251,191,36,0.55)"; // amarelo
+        const modalBorder = "rgba(251,191,36,0.95)";
+
+        const bg = labels.map((_, i) => (modalIdx.has(i) ? modalBg : baseBg));
+        const border = labels.map((_, i) => (modalIdx.has(i) ? modalBorder : baseBorder));
+
         if (chart) chart.destroy();
         chart = new Chart(ctx, {
           type: "bar",
-          data: { labels, datasets: [{ label: "Frequência", data }] },
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Frequência",
+                data,
+                backgroundColor: bg,
+                borderColor: border,
+                borderWidth: 1.5,
+              },
+            ],
+          },
           options: {
             responsive: true,
             plugins: {
               legend: { display: false },
-              tooltip: { callbacks: { label: ctx => `freq: ${ctx.formattedValue}` } },
+              tooltip: { callbacks: { label: c => `freq: ${c.formattedValue}` } },
             },
             scales: {
               x: { grid: { color: "rgba(122,162,255,0.15)" }, ticks: { color: "#dbe4ff", maxRotation: 0, autoSkip: true } },
@@ -461,6 +571,7 @@
           },
         });
       }
+
       function downloadCsvSummary(sorted, bins, s) {
         const lines = [];
         lines.push("Resumo");
@@ -488,7 +599,8 @@
           acc += b.freq;
           const fr = total ? b.freq / total : 0;
           const accRel = total ? acc / total : 0;
-          lines.push(`${i + 1};[${b.from} -| ${b.to});${b.freq};${(fr * 100).toFixed(2)}%;${acc};${(accRel * 100).toFixed(2)}%`);
+          const label = b.label ? b.label : `[${b.from} - ${b.to})`;
+          lines.push(`${i + 1};${label};${b.freq};${(fr * 100).toFixed(2)}%;${acc};${(accRel * 100).toFixed(2)}%`);
         });
 
         const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -501,7 +613,7 @@
       }
 
       // ——— Events ———
-      el("btnCalc").addEventListener("click", () => {
+      document.getElementById("btnCalc").addEventListener("click", () => {
         const decimalMode = decimalSel.value;
         const data = parseNumbers(input.value, decimalMode);
         if (!data.length) {
@@ -511,7 +623,7 @@
         render(data);
       });
 
-      el("btnExample").addEventListener("click", () => {
+      document.getElementById("btnExample").addEventListener("click", () => {
         input.value = "18,20,19,22,21,20,20,19,18,22,19,21,22,20,23,19,18,21,21,20";
       });
     </script>
